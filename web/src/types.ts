@@ -188,6 +188,8 @@ export interface LoginSession {
 
 export interface Model {
   id: string
+  /** 所属域（后端按账号判定）。缺省时退回按 id 前缀判断，兼容旧后端。 */
+  realm?: 'global' | 'cn'
   object: string
   created: number
   owned_by: string
@@ -264,6 +266,10 @@ export interface ModelsResponse {
   count: number
   /** 按域记录促销拉取失败原因（best-effort，失败不影响模型列表）。 */
   promo_errors?: Record<string, string> | null
+  /** 按域记录模型目录直连失败原因（该域可能缺模型或退回网关目录）。 */
+  model_errors?: Record<string, string> | null
+  /** 网关 /v1/models 不可达时的错误；列表来自面板直连上游。 */
+  gateway_error?: string
 }
 
 export interface SessionInfo {

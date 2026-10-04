@@ -1,0 +1,192 @@
+{
+ "code": 0,
+ "msg": "OK",
+ "data": {
+  "agents": [
+   {
+    "name": "cli",
+    "models": [
+     "default-model",
+     "hy4-preview-f",
+     "gpt-5.6-sol",
+     "glm-5.2"
+    ]
+   },
+   {
+    "name": "craft-ide",
+    "models": [
+     "deep-model"
+    ]
+   }
+  ],
+  "models": [
+   {
+    "credits": "",
+    "descriptionEn": "Excellent coding model, great for daily use",
+    "descriptionZh": "优秀的编码模型，适合日常使用",
+    "id": "default-model",
+    "isDefault": true,
+    "maxAllowedSize": 200000,
+    "maxInputTokens": 176000,
+    "maxOutputTokens": 24000,
+    "name": "Auto",
+    "supportsImages": true,
+    "supportsToolCall": true,
+    "temperature": 1,
+    "vendor": "e"
+   },
+   {
+    "contextWindow": {
+     "defaultLength": 300000,
+     "supportedLengths": [
+      300000,
+      1000000
+     ]
+    },
+    "credits": "x0.00",
+    "descriptionEn": "Hunyuan's thinking model with enhanced reasoning capabilities",
+    "descriptionZh": "混元思考模型，具有增强的推理能力",
+    "disabledMultimodal": false,
+    "id": "hy4-preview-f",
+    "maxAllowedSize": 1000000,
+    "maxInputTokens": 1000000,
+    "maxOutputTokens": 64000,
+    "name": "Hy4 preview",
+    "onlyReasoning": true,
+    "reasoning": {
+     "canDisableThinking": false,
+     "defaultEffort": "high",
+     "summary": "auto",
+     "supportedEfforts": [
+      "high"
+     ]
+    },
+    "supportsImages": true,
+    "supportsReasoning": true,
+    "supportsToolCall": true,
+    "temperature": 0.9,
+    "top_p": 1,
+    "vendor": "j"
+   },
+   {
+    "credits": "x3.47",
+    "descriptionEn": "OpenAI's flagship model for complex reasoning and long-horizon task",
+    "descriptionZh": "OpenAI 旗舰模型，擅长复杂推理与长程任务",
+    "id": "gpt-5.6-sol",
+    "maxAllowedSize": 1000000,
+    "maxInputTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "name": "GPT-5.6-Sol",
+    "onlyReasoning": false,
+    "reasoning": {
+     "canDisableThinking": true,
+     "defaultEffort": "high",
+     "summary": "auto",
+     "supportedEfforts": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+     ]
+    },
+    "relatedModels": {
+     "lite": "gpt-5.6-sol",
+     "reasoning": "gpt-5.6-sol"
+    },
+    "supportsImages": true,
+    "supportsReasoning": true,
+    "supportsToolCall": true,
+    "tags": [],
+    "vendor": "e"
+   },
+   {
+    "credits": "x0.79",
+    "descriptionEn": "1M context, built for long-horizon tasks.",
+    "descriptionZh": "1M 上下文，擅长长程任务",
+    "id": "glm-5.2",
+    "maxAllowedSize": 1000000,
+    "maxInputTokens": 1000000,
+    "maxOutputTokens": 48000,
+    "name": "GLM-5.2",
+    "onlyReasoning": false,
+    "reasoning": {
+     "canDisableThinking": true,
+     "defaultEffort": "high",
+     "summary": "auto",
+     "supportedEfforts": [
+      "high",
+      "xhigh"
+     ]
+    },
+    "relatedModels": {
+     "lite": "glm-5.2",
+     "reasoning": "glm-5.2"
+    },
+    "supportsImages": true,
+    "supportsReasoning": true,
+    "supportsToolCall": true,
+    "tags": [
+     "craft"
+    ],
+    "temperature": 1,
+    "vendor": "e"
+   },
+   {
+    "credits": "x3.33 credits",
+    "descriptionEn": "Deep reasoning for analysis and hard problems",
+    "descriptionZh": "深度推理，适合深度分析与难题",
+    "id": "deep-model",
+    "maxAllowedSize": 200000,
+    "maxInputTokens": 176000,
+    "maxOutputTokens": 24000,
+    "name": "Deep",
+    "supportsImages": true,
+    "supportsToolCall": true,
+    "temperature": 1,
+    "vendor": "e"
+   },
+   {
+    "id": "gpt-image-2.5-sunburst",
+    "name": "GPT-Image-2.5-Sunburst",
+    "tags": [
+     "text-to-image",
+     "image-to-image"
+    ]
+   }
+  ],
+  "modelPromotions": [
+   {
+    "badge": {
+     "color": "#FF0000",
+     "display": "activeOnly",
+     "label": "Free now"
+    },
+    "discount": {
+     "discountedCredits": "0x",
+     "displayMode": "replace",
+     "factor": 0
+    },
+    "enabled": true,
+    "hover": {
+     "action": {
+      "labelZh": "Use now",
+      "type": "selectModel"
+     },
+     "textZh": "Aug 6 – Oct 31: Free daily use with unlimited credits."
+    },
+    "id": "hy3-free-trial-202608",
+    "kind": "discount",
+    "modelIds": [
+     "hy3"
+    ],
+    "priority": 200,
+    "schedule": {
+     "timezone": "Asia/Shanghai",
+     "validFrom": "2026-07-06T00:00:00+08:00",
+     "validUntil": "2026-11-01T00:00:00+08:00"
+    }
+   }
+  ]
+ }
+}

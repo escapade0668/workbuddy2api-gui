@@ -1,10 +1,12 @@
 // Models.tsx 模型与倍率：按域（国际版 / 国内版）列出上游支持的模型、积分倍率、
 // 能力旗标与限时优惠，并汇总该域账号的积分到期情况。
 //
-// 数据源三处，都是既有接口，未新增网关端点：
-//   · 网关 /v1/models（经 /api/models 代理）→ 模型、倍率、能力、描述
-//   · 上游 /v3/config 的 modelPromotions（GUI 后端直连取，见 ops.PromotionsForRealm）
-//     → 「限时免费至 9-25」「夜间五折」这类活动信息；网关不解析这一段
+// 数据源（都经 /api/models 汇总）：
+//   · 模型目录以网关为准：新版网关 /v1/models 按域取目录并标注 realms，后端逐域展开 ——
+//     页面显示的就是网关实际能路由的模型与各域倍率。旧版网关（无 realms）时，GUI 后端
+//     按域用该域账号以网关同款 CLI 身份直连上游 /v3/config 取（见 upstream.Config）。
+//   · 促销：上游 /v3/config 的 modelPromotions（桌面端身份，GUI 后端直连，见 ops.realmConfig）。
+//     每个条目带后端判定的 realm，不靠 id 前缀猜
 //   · /api/accounts → 账号积分；其中「到期」来自 GUI 侧主动查询积分包
 //     响应里的 CycleEndTime，没刷过积分时为空（页面会提示点刷新）。
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -141,6 +143,8 @@ function modelPromo(m: Model): PromoView | null {
 export default function Models() {
   const [models, setModels] = useState<Model[]>([])
   const [promoErrors, setPromoErrors] = useState<Record<string, string>>({})
+  const [modelErrors, setModelErrors] = useState<Record<string, string>>({})
+  const [gatewayError, setGatewayError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [realm, setRealm] = useState<Realm>('global')
@@ -156,6 +160,8 @@ export default function Models() {
       const m = await api.models()
       setModels(m.data ?? [])
       setPromoErrors(m.promo_errors ?? {})
+      setModelErrors(m.model_errors ?? {})
+      setGatewayError(m.gateway_error ?? null)
       setError(null)
       setRefreshedAt(new Date())
     } catch (err) {
@@ -172,7 +178,7 @@ export default function Models() {
   // 按域统计，供 tab 显示数量。
   const countByRealm = useMemo(() => {
     const out: Record<Realm, number> = { global: 0, cn: 0 }
-    for (const m of models) out[modelRealm(m.id)]++
+    for (const m of models) out[modelRealm(m)]++
     return out
   }, [models])
 
@@ -192,14 +198,14 @@ export default function Models() {
   // 每个域里有优惠的模型数（含时段型），tab 上提示用。
   const promoByRealm = useMemo(() => {
     const out: Record<Realm, number> = { global: 0, cn: 0 }
-    for (const m of models) if (modelPromo(m)) out[modelRealm(m.id)]++
+    for (const m of models) if (modelPromo(m)) out[modelRealm(m)]++
     return out
   }, [models])
 
   // 过滤 + 排序。
   const rows = useMemo(() => {
     const kw = q.trim().toLowerCase()
-    let list = models.filter((m) => modelRealm(m.id) === realm)
+    let list = models.filter((m) => modelRealm(m) === realm)
     if (kw) {
       list = list.filter((m) =>
         `${m.id} ${m.name ?? ''} ${m.description ?? ''} ${m.vendor ?? ''} ${(m.tags ?? []).join(' ')}`
@@ -275,6 +281,16 @@ export default function Models() {
       </div>
 
       {error && <Alert kind="error">{error}</Alert>}
+
+      {gatewayError && (
+        <Alert kind="warn">网关模型列表不可达（{gatewayError}），以下为面板直连上游取得的目录。</Alert>
+      )}
+
+      {Object.entries(modelErrors).map(([r, msg]) => (
+        <Alert key={`m-${r}`} kind="warn">
+          {r === 'global' ? '国际版' : '国内版'}模型目录拉取失败：{msg}
+        </Alert>
+      ))}
 
       {Object.entries(promoErrors).map(([r, msg]) => (
         <Alert key={r} kind="warn">

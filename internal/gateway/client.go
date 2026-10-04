@@ -78,6 +78,11 @@ type Model struct {
 	MaxAllowedSize    int64    `json:"max_allowed_size,omitempty"`
 	ReasoningEffort   string   `json:"reasoning_effort,omitempty"`
 	ReasoningSummary  string   `json:"reasoning_summary,omitempty"`
+
+	// Realms 该模型可用的域（cn / global）。新版网关按域取目录并合并后下发；
+	// 旧版网关没有此字段。CreditsByRealm 在两个域倍率原文不同时给出（此时 Credits 为空）。
+	Realms         []string          `json:"realms,omitempty"`
+	CreditsByRealm map[string]string `json:"credits_by_realm,omitempty"`
 }
 
 // Client 网关客户端。每次请求都携带当前 api_key，因此支持运行期改配置。

@@ -1,0 +1,219 @@
+{
+ "code": 0,
+ "msg": "OK",
+ "data": {
+  "agents": [
+   {
+    "name": "cli",
+    "models": [
+     "auto",
+     "glm-5.2",
+     "deepseek-v4.1-flash",
+     "kimi-k3-1"
+    ]
+   },
+   {
+    "name": "completion",
+    "models": [
+     "codewise-completions"
+    ]
+   }
+  ],
+  "models": [
+   {
+    "descriptionEn": "Balances quality and speed. Automatically selects the best model for each task, with a variable credit multiplier.",
+    "descriptionZh": "平衡效果与速度。自动为每个任务匹配最优模型，积分倍率随之浮动",
+    "disabledMultimodal": false,
+    "id": "auto",
+    "isDefault": true,
+    "maxAllowedSize": 256000,
+    "maxInputTokens": 256000,
+    "maxOutputTokens": 32000,
+    "name": "Auto",
+    "onlyReasoning": true,
+    "reasoning": {
+     "effort": "high",
+     "summary": "auto"
+    },
+    "relatedModels": {
+     "builtin-lite": "wb-lite",
+     "lite": "auto",
+     "reasoning": "auto"
+    },
+    "supportsImages": true,
+    "supportsReasoning": true,
+    "supportsToolCall": true,
+    "tags": [
+     "craft"
+    ],
+    "temperature": 1,
+    "vendor": "f"
+   },
+   {
+    "contextWindow": {
+     "defaultLength": 300000,
+     "supportedLengths": [
+      300000,
+      600000,
+      1000000
+     ]
+    },
+    "credits": "x0.79",
+    "descriptionEn": "1M context, built for long-horizon tasks.",
+    "descriptionZh": "1M 上下文，擅长长程任务",
+    "id": "glm-5.2",
+    "maxAllowedSize": 1000000,
+    "maxInputTokens": 1000000,
+    "maxOutputTokens": 64000,
+    "name": "GLM-5.2",
+    "onlyReasoning": true,
+    "reasoning": {
+     "canDisableThinking": true,
+     "defaultEffort": "high",
+     "summary": "auto",
+     "supportedEfforts": [
+      "high",
+      "xhigh"
+     ]
+    },
+    "relatedModels": {
+     "builtin-lite": "wb-lite",
+     "lite": "glm-5.2",
+     "reasoning": "glm-5.2"
+    },
+    "supportsImages": true,
+    "supportsReasoning": true,
+    "supportsToolCall": true,
+    "tags": [
+     "craft"
+    ],
+    "temperature": 1,
+    "vendor": "e"
+   },
+   {
+    "contextWindow": {
+     "defaultLength": 300000,
+     "supportedLengths": [
+      300000,
+      600000,
+      1000000
+     ]
+    },
+    "credits": "x0.11",
+    "descriptionEn": "DeepSeek flagship model, supporting 1M context window, native multimodal model",
+    "descriptionZh": "DeepSeek 旗舰模型，支持 1M 上下文窗口，原生多模态",
+    "id": "deepseek-v4.1-flash",
+    "maxAllowedSize": 1000000,
+    "maxInputTokens": 1000000,
+    "maxOutputTokens": 128000,
+    "name": "Deepseek-V4.1-Flash",
+    "onlyReasoning": true,
+    "reasoning": {
+     "effort": "high",
+     "summary": "auto"
+    },
+    "relatedModels": {
+     "builtin-lite": "wb-lite",
+     "lite": "deepseek-v4.1-flash",
+     "reasoning": "deepseek-v4.1-flash"
+    },
+    "supportsImages": true,
+    "supportsReasoning": true,
+    "supportsToolCall": true,
+    "temperature": 1,
+    "vendor": "f"
+   },
+   {
+    "contextWindow": {
+     "defaultLength": 300000,
+     "supportedLengths": [
+      300000,
+      600000,
+      1000000
+     ]
+    },
+    "credits": "x1.62",
+    "descriptionEn": "Excels at complex, long-horizon autonomous tasks, with standout front-end skills and strong knowledge work and scientific reasoning",
+    "descriptionZh": "擅长处理复杂的长程自主任务，前端开发能力突出，同时在知识工作与科研推理上表现出色。",
+    "id": "kimi-k3-1",
+    "maxAllowedSize": 1000000,
+    "maxInputTokens": 1000000,
+    "maxOutputTokens": 32000,
+    "name": "Kimi-K3",
+    "onlyReasoning": true,
+    "reasoning": {
+     "canDisableThinking": true,
+     "defaultEffort": "high",
+     "summary": "auto",
+     "supportedEfforts": [
+      "low",
+      "high",
+      "xhigh"
+     ]
+    },
+    "relatedModels": {
+     "builtin-lite": "wb-lite",
+     "lite": "kimi-k3-1",
+     "reasoning": "kimi-k3-1"
+    },
+    "supportsImages": true,
+    "supportsReasoning": true,
+    "supportsToolCall": true,
+    "temperature": 1,
+    "vendor": "f"
+   },
+   {
+    "descriptionEn": "Specialized model for intelligent code completion and suggestions",
+    "descriptionZh": "专门用于智能代码补全和建议的模型",
+    "id": "codewise-completions",
+    "maxOutputTokens": 256,
+    "name": "codewise-completions",
+    "supportsExtra": true,
+    "vendor": "e"
+   },
+   {
+    "id": "hunyuan-image-alpha",
+    "name": "Hunyuan Image Alpha",
+    "tags": [
+     "text-to-image"
+    ]
+   }
+  ],
+  "modelPromotions": [
+   {
+    "badge": {
+     "color": "#1E90FF",
+     "label": "夜间折扣"
+    },
+    "discount": {
+     "discountedCredits": "0.50x",
+     "displayMode": "strikethrough",
+     "factor": 0.5
+    },
+    "enabled": true,
+    "hover": {
+     "action": {
+      "labelZh": "去使用",
+      "type": "selectModel"
+     },
+     "textZh": "每晚 23:00—次日 8:00 积分限时立减，错峰用更省"
+    },
+    "id": "glm-52-night-discount-202607",
+    "kind": "discount",
+    "modelIds": [
+     "glm-5.2"
+    ],
+    "priority": 100,
+    "schedule": {
+     "daily": [
+      {
+       "end": "7:50",
+       "start": "23:00"
+      }
+     ],
+     "timezone": "Asia/Shanghai"
+    }
+   }
+  ]
+ }
+}

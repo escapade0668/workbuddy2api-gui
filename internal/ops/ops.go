@@ -145,7 +145,7 @@ type Service struct {
 
 	mu      sync.RWMutex
 	credits map[string]creditCache
-	promos  map[string]promoCache
+	configs map[string]realmConfigCache
 	// creditLoading 标记「正在后台查询积分」的 uid，用于单飞（避免重复打上游）。
 	creditLoading map[string]bool
 
@@ -153,11 +153,12 @@ type Service struct {
 	proc *gwproc.Manager
 }
 
-// promoCache 促销缓存条目（按 realm 维度：促销是域级配置，同域账号看到的一致）。
-type promoCache struct {
-	promos []upstream.ModelPromotion
-	at     time.Time
-	err    string
+// realmConfigCache 按域缓存的 /v3/config 解析结果（模型目录 + 促销，同一次请求取回）。
+// 按 realm 维度：这是域级配置，同域账号看到的一致。
+type realmConfigCache struct {
+	cfg *upstream.RealmConfig
+	at  time.Time
+	err string
 }
 
 // promoTTL 促销缓存时长。促销是营销配置，变化很慢，没必要每次开页面都打上游。
@@ -178,14 +179,38 @@ func realmOfAccount(a *authstore.Account) string {
 	return "cn"
 }
 
-// PromotionsForRealm 返回某域的模型促销配置（best-effort）。
+// accountForRealm 挑该域一个未过期账号用于只读查询（促销 / 模型目录）；没有返回 nil。
+// 临近过期的先续期，避免拿一个马上失效的 token 去打上游；续期失败不阻断（可能仍能读）。
+func (s *Service) accountForRealm(realm string) *authstore.Account {
+	accounts, _ := s.store.List()
+	for _, a := range accounts {
+		if realmOfAccount(a) == realm && !a.Expired() {
+			if a.NeedsRefresh(10 * time.Minute) {
+				_ = s.refreshAccount(a)
+			}
+			return a
+		}
+	}
+	return nil
+}
+
+// HasAccountInRealm 报告凭证目录里是否有该域的账号（不论是否过期）。
+func (s *Service) HasAccountInRealm(realm string) bool {
+	accounts, _ := s.store.List()
+	for _, a := range accounts {
+		if realmOfAccount(a) == realm {
+			return true
+		}
+	}
+	return false
+}
+
+// realmConfig 返回某域的 /v3/config（带缓存）；失败返回 (nil, 错误文案)。
 //
-// 每域挑一个未过期账号去取上游 /v3/config —— 网关不解析 modelPromotions，故 GUI 直连。
-// 命中缓存（promoTTL）时零上游调用；失败返回 (nil, 错误文案) 且不阻断调用方，
-// 促销拿不到不该让整个模型页打不开。
-func (s *Service) PromotionsForRealm(realm string) ([]upstream.ModelPromotion, string) {
+// 命中缓存（promoTTL）时零上游调用；失败只缓存 promoErrTTL，避免一次抖动占住 10 分钟。
+func (s *Service) realmConfig(realm string) (*upstream.RealmConfig, string) {
 	s.mu.RLock()
-	c, ok := s.promos[realm]
+	c, ok := s.configs[realm]
 	s.mu.RUnlock()
 	if ok {
 		ttl := promoTTL
@@ -193,39 +218,52 @@ func (s *Service) PromotionsForRealm(realm string) ([]upstream.ModelPromotion, s
 			ttl = promoErrTTL
 		}
 		if time.Since(c.at) < ttl {
-			return c.promos, c.err
+			return c.cfg, c.err
 		}
 	}
 
-	accounts, _ := s.store.List()
-	var acct *authstore.Account
-	for _, a := range accounts {
-		if realmOfAccount(a) == realm && !a.Expired() {
-			acct = a
-			break
-		}
+	var (
+		cfg *upstream.RealmConfig
+		msg string
+	)
+	if acct := s.accountForRealm(realm); acct == nil {
+		msg = "该域没有可用账号，无法查询上游配置"
+	} else if got, err := s.up.Config(acct); err != nil {
+		msg = err.Error()
+	} else {
+		cfg = got
 	}
-	if acct == nil {
-		msg := "该域没有可用账号，无法查询促销"
-		s.mu.Lock()
-		s.promos[realm] = promoCache{at: time.Now(), err: msg}
-		s.mu.Unlock()
+	s.mu.Lock()
+	s.configs[realm] = realmConfigCache{cfg: cfg, at: time.Now(), err: msg}
+	s.mu.Unlock()
+	return cfg, msg
+}
+
+// ModelsForRealm 返回某域的模型目录：用该域账号直连上游取，域归属由账号决定。
+//
+// 网关 /v1/models 只用随机一个账号取目录且不带域前缀，双域并存时无法区分，
+// 故模型页按域各取一次。失败返回 (nil, 错误文案)，由调用方降级展示。
+func (s *Service) ModelsForRealm(realm string) ([]upstream.CatalogModel, string) {
+	cfg, msg := s.realmConfig(realm)
+	if msg != "" {
 		return nil, msg
 	}
-	if acct.NeedsRefresh(10 * time.Minute) {
-		// 过期前先续期，避免拿一个马上失效的 token 去打上游；失败不阻断（可能仍能读）。
-		_ = s.refreshAccount(acct)
+	if cfg.ModelsErr != "" {
+		return nil, cfg.ModelsErr
 	}
+	return cfg.Models, ""
+}
 
-	promos, err := s.up.Promotions(acct)
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err != nil {
-		s.promos[realm] = promoCache{at: time.Now(), err: err.Error()}
-		return nil, err.Error()
+// PromotionsForRealm 返回某域的模型促销配置（best-effort）。
+//
+// 数据源是 /v3/config 的 modelPromotions —— 网关不解析这一段，故 GUI 直连。
+// 失败返回 (nil, 错误文案) 且不阻断调用方，促销拿不到不该让整个模型页打不开。
+func (s *Service) PromotionsForRealm(realm string) ([]upstream.ModelPromotion, string) {
+	cfg, msg := s.realmConfig(realm)
+	if msg != "" {
+		return nil, msg
 	}
-	s.promos[realm] = promoCache{promos: promos, at: time.Now()}
-	return promos, ""
+	return cfg.Promotions, ""
 }
 
 // New 构建服务。
@@ -239,7 +277,7 @@ func New(cfg *config.Config, store *authstore.Store, gw *gateway.Client, up *ups
 		logins:        NewLoginManager(up),
 		pricing:       pricing.New(cfg.PricingFile),
 		credits:       map[string]creditCache{},
-		promos:        map[string]promoCache{},
+		configs:       map[string]realmConfigCache{},
 		creditLoading: map[string]bool{},
 	}
 }

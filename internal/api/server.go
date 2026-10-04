@@ -524,15 +524,138 @@ func (s *Server) handlePricingDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "已移除该模型价格"})
 }
 
-// modelView 模型条目 + 挂上的促销。内嵌 gateway.Model 让原有字段平铺，
+// modelView 模型条目 + 所属域 + 挂上的促销。内嵌 gateway.Model 让原有字段平铺，
 // promotions 是附加字段（无促销时省略，前端按「无优惠」处理）。
 type modelView struct {
-	gateway.Model
+	realmModel
 	Promotions []upstream.ModelPromotion `json:"promotions,omitempty"`
 }
 
+// realmModel 模型条目 + 显式的域归属（global | cn）。前端按 realm 分栏，不再靠 id 前缀猜。
+type realmModel struct {
+	gateway.Model
+	Realm string `json:"realm"`
+}
+
+// realmSource 按域取模型目录的数据源（ops.Service 实现；测试可替换）。
+type realmSource interface {
+	HasAccountInRealm(realm string) bool
+	ModelsForRealm(realm string) ([]upstream.CatalogModel, string)
+}
+
+var realmOrder = []string{"global", "cn"}
+
+// assembleModels 把网关 /v1/models 与各域直连目录合成「带域归属」的模型列表。
+//
+// 网关有三种形态：
+//   - 带 realms 字段（新版网关按域取目录并合并）：以网关为准逐域展开，不打上游 ——
+//     面板显示的就是网关实际能路由的模型；
+//   - 已分域：id 带 global:/cn: 前缀（无前缀视为 cn）——直接沿用，不打上游；
+//   - 未分域（linbeize/workbuddy2api 即是）：只用池里随机**一个**账号取目录、返回裸 id。
+//     双域并存时只拿得到其中一个域且无从判断是哪个，旧逻辑一律归国内版 ——
+//     于是「只有国际版账号 → 模型跑到国内版栏」「双域 → 国际版整栏丢失」。
+//     此时改为按域用该域账号直连上游 /v3/config 取目录（含倍率），域归属由账号决定。
+//
+// 返回的 errs 是各域直连失败的说明（best-effort）；仅一个域有账号且直连失败时，
+// 网关目录必然属于该域，回落展示网关目录。
+func assembleModels(gwModels []gateway.Model, gwErr error, src realmSource) ([]realmModel, map[string]string, error) {
+	errs := map[string]string{}
+	if gwErr == nil {
+		if out := expandRealmTagged(gwModels); out != nil {
+			return out, errs, nil
+		}
+	}
+	realmAware := false
+	for _, m := range gwModels {
+		if strings.HasPrefix(m.ID, "global:") || strings.HasPrefix(m.ID, "cn:") {
+			realmAware = true
+			break
+		}
+	}
+	if gwErr == nil && realmAware {
+		out := make([]realmModel, 0, len(gwModels))
+		for _, m := range gwModels {
+			realm, _ := modelRealmBare(m.ID)
+			out = append(out, realmModel{Model: m, Realm: realm})
+		}
+		return out, errs, nil
+	}
+
+	var withAccounts []string
+	for _, r := range realmOrder {
+		if src.HasAccountInRealm(r) {
+			withAccounts = append(withAccounts, r)
+		}
+	}
+	// 本地只有一个域有账号时，网关的裸 id 目录必然属于这个域（直连失败时的回落）。
+	soleRealm := ""
+	if len(withAccounts) == 1 {
+		soleRealm = withAccounts[0]
+	}
+
+	var out []realmModel
+	for _, realm := range withAccounts {
+		catalog, msg := src.ModelsForRealm(realm)
+		if msg != "" {
+			errs[realm] = msg
+			if realm == soleRealm && gwErr == nil {
+				for _, m := range gwModels {
+					out = append(out, realmModel{Model: m, Realm: realm})
+				}
+			}
+			continue
+		}
+		for _, c := range catalog {
+			out = append(out, realmModel{Model: catalogModel(c), Realm: realm})
+		}
+	}
+
+	// 面板读不到任何账号（本地面板 + 远端网关，凭证目录不是同一个）：无从分域，
+	// 保持旧行为原样展示网关目录，总好过一片空白。
+	if len(withAccounts) == 0 && gwErr == nil {
+		for _, m := range gwModels {
+			realm, _ := modelRealmBare(m.ID)
+			out = append(out, realmModel{Model: m, Realm: realm})
+		}
+	}
+	if len(out) == 0 && gwErr != nil {
+		return nil, errs, gwErr
+	}
+	return out, errs, nil
+}
+
+// expandRealmTagged 把带 realms 的网关条目逐域展开成单域条目（倍率取该域的原文）；
+// 网关条目都不带 realms（旧版网关）时返回 nil。
+func expandRealmTagged(gwModels []gateway.Model) []realmModel {
+	var out []realmModel
+	for _, m := range gwModels {
+		for _, realm := range m.Realms {
+			one := m
+			if c, ok := m.CreditsByRealm[realm]; ok {
+				one.Credits = c
+			}
+			one.Realms, one.CreditsByRealm = nil, nil
+			out = append(out, realmModel{Model: one, Realm: realm})
+		}
+	}
+	return out
+}
+
+// catalogModel 上游目录条目 → 网关 /v1/models 同形的条目（前端只认这一种形状）。
+func catalogModel(c upstream.CatalogModel) gateway.Model {
+	return gateway.Model{
+		ID: c.ID, Object: "model", OwnedBy: "workbuddy",
+		ContextLength: c.ContextLength, MaxOutput: c.MaxOutput,
+		Name: c.Name, Description: c.Description, Credits: c.Credits, Vendor: c.Vendor, Tags: c.Tags,
+		IsDefault: c.IsDefault, OnlyReasoning: c.OnlyReasoning, SupportsImages: c.SupportsImages,
+		SupportsReasoning: c.SupportsReasoning, SupportsToolCall: c.SupportsToolCall,
+		MaxAllowedSize: c.MaxAllowedSize, ReasoningEffort: c.ReasoningEffort, ReasoningSummary: c.ReasoningSummary,
+	}
+}
+
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
-	models, err := s.svc.Gateway().Models(r.Context())
+	gwModels, gwErr := s.svc.Gateway().Models(r.Context())
+	models, modelErrs, err := assembleModels(gwModels, gwErr, s.svc)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -542,7 +665,7 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	// 故失败降级为 promo_errors 里的文案，不影响 data。
 	promosByRealm := map[string][]upstream.ModelPromotion{}
 	promoErrs := map[string]string{}
-	for _, realm := range []string{"global", "cn"} {
+	for _, realm := range realmOrder {
 		p, msg := s.svc.PromotionsForRealm(realm)
 		if len(p) > 0 {
 			promosByRealm[realm] = p
@@ -554,9 +677,9 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]modelView, 0, len(models))
 	for _, m := range models {
-		realm, bare := modelRealmBare(m.ID)
-		v := modelView{Model: m}
-		for _, p := range promosByRealm[realm] {
+		_, bare := modelRealmBare(m.ID)
+		v := modelView{realmModel: m}
+		for _, p := range promosByRealm[m.Realm] {
 			for _, id := range p.ModelIDs {
 				if strings.EqualFold(id, bare) {
 					v.Promotions = append(v.Promotions, p)
@@ -574,6 +697,12 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	resp := map[string]any{"data": out, "count": len(out)}
 	if len(promoErrs) > 0 {
 		resp["promo_errors"] = promoErrs
+	}
+	if len(modelErrs) > 0 {
+		resp["model_errors"] = modelErrs
+	}
+	if gwErr != nil {
+		resp["gateway_error"] = gwErr.Error()
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

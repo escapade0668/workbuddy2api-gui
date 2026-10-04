@@ -829,31 +829,36 @@ type ModelPromotion struct {
 	Text              string        `json:"text,omitempty"` // hover.textZh 原文
 }
 
-// Promotions 拉取账号所在域的模型促销配置。
+// fetchV3Config 拉取账号所在域的 /v3/config（已剥信封，返回 data）。
 //
-// 数据源是 /v3/config 的 data.modelPromotions —— 与网关 /v1/models 的模型目录同源，
-// 但网关只解析 models/agents，未解析这一段，所以 GUI 自己直连取（与积分查询同思路）。
-// 促销是营销配置，调用方负责缓存；本方法不做缓存。
-func (c *Client) Promotions(a *authstore.Account) ([]ModelPromotion, error) {
+// 一份响应同时包含模型目录（models + agents）与促销（modelPromotions），
+// 由 Config 一次取回、分别解析。调用方负责缓存；本方法不做缓存。
+//
+// cli=false 用桌面端头（取促销：CLI UA 拿到的配置里没有 modelPromotions，见 desktopHeaders）；
+// cli=true 用网关同款 CLI 头（取模型目录：与网关可路由的模型一致）。
+func (c *Client) fetchV3Config(a *authstore.Account, cli bool) (json.RawMessage, error) {
 	region := regionOfAccount(a)
 	req, err := http.NewRequest(http.MethodGet, c.chatBase(a)+EndpointV3Config, nil)
 	if err != nil {
 		return nil, err
 	}
-	// 必须用桌面端头：CLI UA 拿到的配置里没有 modelPromotions（见 desktopHeaders 注释）。
-	desktopHeaders(req, region)
+	if cli {
+		commonHeaders(req, region)
+	} else {
+		desktopHeaders(req, region)
+		req.Header.Set("X-CodeBuddy-Request", "1")
+	}
 	req.Header.Set("Authorization", "Bearer "+a.AccessToken)
-	req.Header.Set("X-CodeBuddy-Request", "1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), promoFetchTimeout)
 	defer cancel()
 	req = req.WithContext(ctx)
 
-	data, err := c.doJSON(req)
-	if err != nil {
-		return nil, err
-	}
-	// 注意 doJSON 已经把信封剥掉了（返回 data 本身），所以这里直接解顶层 modelPromotions。
+	return c.doJSON(req)
+}
+
+// parsePromotions 解析 /v3/config 的 data.modelPromotions（data 已剥信封）。
+func parsePromotions(data json.RawMessage) ([]ModelPromotion, error) {
 	var resp struct {
 		Promotions []struct {
 			ID       string   `json:"id"`

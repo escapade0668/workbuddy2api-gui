@@ -36,7 +36,9 @@ export default function Playground() {
   const loadModels = async () => {
     try {
       const res = await api.models()
-      const list = res.data ?? []
+      // 双域账号时同名模型会在两个域各出现一次（网关按裸 id 调用，不区分域），去重。
+      const seen = new Set<string>()
+      const list = (res.data ?? []).filter((m) => !seen.has(m.id) && (seen.add(m.id), true))
       setModels(list)
       if (list.length > 0 && !model) setModel(list[0].id)
       setError(null)
