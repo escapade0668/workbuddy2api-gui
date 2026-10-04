@@ -103,6 +103,28 @@ vi config.json            # 改 auth_dir / config_file / ui.password
 
 > 前端未构建也能编译运行：此时后端照常工作，页面会显示"前端未构建"的引导提示。
 
+### 方式三：免安装包（面板 + 网关一起启动，Windows / Linux / macOS）
+
+没有 Docker 的机器，可以打一个解压即用的压缩包：面板以**托管模式**（`gateway_exec`）
+把网关作为子进程启动，崩溃自动拉起，退出时两者一起保存状态；添加账号后面板直接重启
+网关进程加载，不依赖 Docker。
+
+```bash
+# 交叉编译全部平台（需要 Go、Node、python3、openssl、zip）
+scripts/package.sh                          # 自动克隆网关源码
+scripts/package.sh ../workbuddy2api         # 或使用本地网关源码
+TARGETS="linux/amd64" scripts/package.sh    # 只打指定平台
+```
+
+| 产物（`release/`） | 启动方式 |
+|---|---|
+| `wbgui-windows-{amd64,arm64}.zip` | 双击 `start.bat`，关闭窗口即停止 |
+| `wbgui-linux-{amd64,arm64}.tar.gz` | `./start.sh`，Ctrl+C 停止 |
+| `wbgui-darwin-{amd64,arm64}.tar.gz` | `./start.sh`；未签名，首次需 `xattr -dr com.apple.quarantine <目录>` |
+
+每个包的网关 `api_key` 在打包时随机生成，写在包内 `README.txt` 与 `gateway/config.json` 里。
+包内配置默认只监听 `127.0.0.1`，并开启了 `dangerous_ops`（否则添加账号后无法自动重启网关）。
+
 ## ⚙️ 配置说明
 
 完整字段见 [`config.example.json`](config.example.json)。
@@ -237,6 +259,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/tasks/checki
 │   ├── ops/                业务操作层（账号聚合、批量任务、OAuth、配置编辑、Docker）
 │   ├── upstream/           腾讯 CodeBuddy 直连客户端
 │   └── webui/              前端产物 embed + SPA 回落
+├── scripts/                打包脚本（多平台免安装包）
 └── web/                    React + TypeScript 前端（Vite）
     └── src/pages/          六个页面
 ```

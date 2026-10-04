@@ -28,3 +28,7 @@ shots/
 # 浏览器测试截图
 shots-stats.png
 shots/
+
+# 本地打包产物
+/release/
+/temp/
