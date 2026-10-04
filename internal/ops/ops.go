@@ -16,6 +16,7 @@ import (
 	"workbuddy2api-gui/internal/config"
 	"workbuddy2api-gui/internal/fsutil"
 	"workbuddy2api-gui/internal/gateway"
+	"workbuddy2api-gui/internal/gwproc"
 	"workbuddy2api-gui/internal/pricing"
 	"workbuddy2api-gui/internal/upstream"
 )
@@ -147,6 +148,9 @@ type Service struct {
 	promos  map[string]promoCache
 	// creditLoading 标记「正在后台查询积分」的 uid，用于单飞（避免重复打上游）。
 	creditLoading map[string]bool
+
+	// proc 托管模式下的网关进程管理器（nil = 未托管，重启走 docker）。
+	proc *gwproc.Manager
 }
 
 // promoCache 促销缓存条目（按 realm 维度：促销是域级配置，同域账号看到的一致）。

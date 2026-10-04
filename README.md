@@ -118,6 +118,7 @@ vi config.json            # 改 auth_dir / config_file / ui.password
 | `backup_dir` | `./data/backups` | 配置备份目录；单文件挂载下备份会写到这里（见下方 FAQ） |
 | `credentials_file` | 空 | 面板登录凭据持久化文件，**网页改密码必需**（`config.json` 常为只读挂载）。留空则系统页的「修改密码」按钮禁用 |
 | `docker_container` | `workbuddy2api` | 网关容器名，供系统页查询/重启；留空则关闭重启能力 |
+| `gateway_exec` | 空 | 网关可执行文件路径。**非空即托管模式**：面板启动时以 `-config <config_file>` 拉起网关（工作目录为可执行文件所在目录），崩溃自动重启，面板退出时一并停止；系统页「重启网关」改为重启该进程。启动时若 `gateway_url` 上已有网关在应答，则不再托管 |
 | `dangerous_ops` | `false` | 解锁删除账号 / 重启容器 / 恢复配置备份 |
 | `read_only` | `false` | 全局只读：关闭一切写操作 |
 | `refresh_config_on_login` | `true` | 网页登录成功后自动重启网关加载新账号（还需 `dangerous_ops`） |
@@ -133,7 +134,7 @@ vi config.json            # 改 auth_dir / config_file / ui.password
 
 `WBGUI_LISTEN` · `WBGUI_GATEWAY_URL` · `WBGUI_GATEWAY_API_KEY` · `WBGUI_AUTH_DIR` ·
 `WBGUI_AUTH_OWNER_UID` · `WBGUI_AUTH_OWNER_GID` · `WBGUI_CONFIG_FILE` · `WBGUI_CREDENTIALS_FILE` ·
-`WBGUI_CONTAINER` · `WBGUI_USERNAME` · `WBGUI_PASSWORD` · `WBGUI_SESSION_TTL` ·
+`WBGUI_CONTAINER` · `WBGUI_GATEWAY_EXEC` · `WBGUI_USERNAME` · `WBGUI_PASSWORD` · `WBGUI_SESSION_TTL` ·
 `WBGUI_DANGEROUS_OPS`（bool） · `WBGUI_READ_ONLY`（bool） · `WBGUI_REFRESH_CONFIG_ON_LOGIN`（bool） ·
 `WBGUI_BACKUP_DIR` · `WBGUI_TIMEOUT_SECONDS`
 
@@ -232,6 +233,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8787/api/tasks/checki
 │   ├── authstore/          凭证文件读写（原子写、uid 校验防穿越）
 │   ├── config/             面板自身配置
 │   ├── gateway/            workbuddy2api 网关客户端
+│   ├── gwproc/             托管模式：把网关作为子进程启停、崩溃拉起
 │   ├── ops/                业务操作层（账号聚合、批量任务、OAuth、配置编辑、Docker）
 │   ├── upstream/           腾讯 CodeBuddy 直连客户端
 │   └── webui/              前端产物 embed + SPA 回落

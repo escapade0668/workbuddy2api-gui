@@ -17,6 +17,7 @@ import (
 	"workbuddy2api-gui/internal/authstore"
 	"workbuddy2api-gui/internal/config"
 	"workbuddy2api-gui/internal/gateway"
+	"workbuddy2api-gui/internal/gwproc"
 	"workbuddy2api-gui/internal/ops"
 	"workbuddy2api-gui/internal/upstream"
 	"workbuddy2api-gui/internal/webui"
@@ -95,9 +96,17 @@ func main() {
 	log.Printf("  网关地址:   %s", cfg.GatewayURL)
 	log.Printf("  凭证目录:   %s", store.Dir())
 	log.Printf("  网关配置:   %s", cfg.UpstreamConfigFile)
-	log.Printf("  容器名:     %s（高危操作=%v，只读=%v）", orNone(cfg.DockerContainer), cfg.DangerousOps, cfg.ReadOnly)
+	if cfg.GatewayExec != "" {
+		log.Printf("  网关程序:   %s（托管模式，高危操作=%v，只读=%v）", cfg.GatewayExec, cfg.DangerousOps, cfg.ReadOnly)
+	} else {
+		log.Printf("  容器名:     %s（高危操作=%v，只读=%v）", orNone(cfg.DockerContainer), cfg.DangerousOps, cfg.ReadOnly)
+	}
 	if cfg.UsingDefaultPassword() {
 		log.Printf("  ⚠️  正在使用默认口令（admin/workbuddy），请尽快在配置文件或 WBGUI_PASSWORD 中修改")
+	}
+	proc := startManagedGateway(ctx, cfg, gw)
+	if proc != nil {
+		svc.SetGatewayProcess(proc)
 	}
 	if hc, err := gw.Health(ctx); err == nil {
 		log.Printf("  网关健康:   OK（账号 %d/%d 可用）", hc.Healthy, hc.Total)
@@ -116,9 +125,49 @@ func main() {
 	}()
 
 	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if proc != nil {
+			_ = proc.Close(context.Background())
+		}
 		log.Fatalf("HTTP 服务失败: %v", err)
 	}
+	if proc != nil {
+		log.Printf("正在停止网关进程…")
+		if err := proc.Close(context.Background()); err != nil {
+			log.Printf("停止网关失败: %v", err)
+		}
+	}
 	log.Printf("已退出")
+}
+
+// startManagedGateway 托管模式下启动网关子进程并等它就绪；未配置 gateway_exec 返回 nil。
+//
+// 若 gateway_url 上已有网关在应答（例如用户另开了一个），则不再托管 —— 再起一个只会
+// 端口冲突、崩溃重启循环；此时「重启网关」回落到 docker 模式（通常即不可用）。
+func startManagedGateway(ctx context.Context, cfg *config.Config, gw *gateway.Client) *gwproc.Manager {
+	if cfg.GatewayExec == "" {
+		return nil
+	}
+	if _, err := gw.Health(ctx); err == nil {
+		log.Printf("  ⚠️  %s 上已有网关在运行，跳过托管启动（如需由面板托管，请先关闭该网关）", cfg.GatewayURL)
+		return nil
+	}
+	proc, err := gwproc.New(cfg.GatewayExec, cfg.UpstreamConfigFile, os.Stderr)
+	if err != nil {
+		log.Fatalf("托管网关失败: %v", err)
+	}
+	if err := proc.Start(); err != nil {
+		log.Printf("  ⚠️  %v", err)
+		return proc
+	}
+	// 等网关监听就绪，避免紧接着的健康检查与首个页面请求报「不可达」。
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) && ctx.Err() == nil {
+		if _, err := gw.Health(ctx); err == nil {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return proc
 }
 
 // readGatewayKey 从网关 config.json 读取 api_key。

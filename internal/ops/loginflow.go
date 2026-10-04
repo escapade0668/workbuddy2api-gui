@@ -45,17 +45,17 @@ func (s *Service) PollLogin(ctx context.Context, id string) (*LoginSession, erro
 	file := baseName(acct.FilePath)
 	restartNote := ""
 
-	// 按配置重启容器以加载新账号。
-	if s.cfg.RefreshConfigOnLogin && s.cfg.DangerousOps && s.cfg.DockerContainer != "" {
-		if msg, rerr := s.RestartContainer(ctx); rerr != nil {
-			restartNote = "凭证已保存，但重启容器失败，请手动重启：" + rerr.Error()
+	// 按配置重启网关以加载新账号。
+	if s.cfg.RefreshConfigOnLogin && s.cfg.DangerousOps && s.GatewayRestartable() {
+		if msg, rerr := s.RestartGateway(ctx); rerr != nil {
+			restartNote = "凭证已保存，但重启网关失败，请手动重启：" + rerr.Error()
 		} else {
 			restartNote = msg + "，新账号已加载"
 		}
 	} else {
 		switch {
-		case s.cfg.DockerContainer == "":
-			restartNote = "凭证已保存；未配置容器名，请手动重启网关使其加载"
+		case !s.GatewayRestartable():
+			restartNote = "凭证已保存；未配置容器名或网关程序，请手动重启网关使其加载"
 		case !s.cfg.DangerousOps:
 			restartNote = "凭证已保存；自动重启需要开启 dangerous_ops，请手动重启网关使其加载"
 		default:

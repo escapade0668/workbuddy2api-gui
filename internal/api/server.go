@@ -791,7 +791,7 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSystemRestart(w http.ResponseWriter, r *http.Request) {
-	msg, err := s.svc.RestartContainer(r.Context())
+	msg, err := s.svc.RestartGateway(r.Context())
 	if err != nil {
 		writeError(w, err)
 		return

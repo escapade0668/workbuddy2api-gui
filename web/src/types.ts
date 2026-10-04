@@ -295,7 +295,10 @@ export interface ConfigResponse {
 }
 
 export interface ContainerInfo {
+  /** docker：通过 docker restart 控制；process：网关是面板托管的子进程（gateway_exec） */
+  mode: 'docker' | 'process'
   name: string
+  pid?: number
   available: boolean
   exists: boolean
   running: boolean

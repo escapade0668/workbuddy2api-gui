@@ -11,6 +11,7 @@
   "pricing_file": "./data/pricing.json",
   "allowed_origins": [],
   "docker_container": "workbuddy2api",
+  "gateway_exec": "",
   "dangerous_ops": false,
   "read_only": false,
   "refresh_config_on_login": true,

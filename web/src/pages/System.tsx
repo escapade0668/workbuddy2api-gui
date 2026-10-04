@@ -62,6 +62,7 @@ export default function System({
   if (loading && !info) return <Spinner label="正在加载系统信息…" />
 
   const c = info?.container
+  const managed = c?.mode === 'process'
   const gatewayServiceOK = info?.gateway_health?.service === 'workbuddy2api'
 
   return (
@@ -81,10 +82,12 @@ export default function System({
             disabled={!session.dangerous_ops || !c?.exists}
             title={
               !session.dangerous_ops
-                ? '需在服务端开启 dangerous_ops 才能重启容器'
+                ? '需在服务端开启 dangerous_ops 才能重启网关'
                 : !c?.exists
                   ? '未检测到容器'
-                  : '重启网关容器以加载新账号/新配置'
+                  : managed
+                    ? '重启网关进程以加载新账号/新配置'
+                    : '重启网关容器以加载新账号/新配置'
             }
           >
             🔁 重启网关
@@ -129,9 +132,9 @@ export default function System({
           <dd>
             {info?.gateway_health ? `${info.gateway_health.healthy} / ${info.gateway_health.total} 可用` : '—'}
           </dd>
-          <dt>容器名</dt>
+          <dt>{managed ? '网关程序' : '容器名'}</dt>
           <dd className="mono">{c?.name || '（未配置）'}</dd>
-          <dt>容器状态</dt>
+          <dt>{managed ? '进程状态' : '容器状态'}</dt>
           <dd>
             {c?.disabled ? (
               <span className="text-faint">未配置 docker_container</span>
@@ -140,7 +143,12 @@ export default function System({
                 <Badge cls={c.running ? 'badge-ok' : 'badge-danger'}>{c.status || 'unknown'}</Badge>
                 {c.health && c.health !== '-' && (
                   <span className="text-faint" style={{ marginLeft: 8 }}>
-                    健康检查：{c.health}
+                    {managed ? c.health : `健康检查：${c.health}`}
+                  </span>
+                )}
+                {managed && c.error && !c.running && (
+                  <span className="text-danger" style={{ marginLeft: 8 }}>
+                    {c.error}
                   </span>
                 )}
               </>
@@ -148,9 +156,18 @@ export default function System({
               <span className="text-danger">{c?.error || '容器不存在'}</span>
             )}
           </dd>
-          <dt>容器镜像</dt>
-          <dd className="mono">{c?.image || '—'}</dd>
-          <dt>容器启动</dt>
+          {managed ? (
+            <>
+              <dt>进程 PID</dt>
+              <dd className="mono">{c?.pid || '—'}</dd>
+            </>
+          ) : (
+            <>
+              <dt>容器镜像</dt>
+              <dd className="mono">{c?.image || '—'}</dd>
+            </>
+          )}
+          <dt>{managed ? '进程启动' : '容器启动'}</dt>
           <dd>{c?.started_at ? fmtISO(c.started_at) : '—'}</dd>
         </dl>
         {!session.dangerous_ops && (
@@ -195,8 +212,14 @@ export default function System({
               <Badge cls="badge-dim">高危操作已锁定</Badge>
             )}
           </dd>
-          <dt>Docker 可用</dt>
-          <dd>{info?.docker_available ? '✅ 是' : '❌ 否（容器控制已降级）'}</dd>
+          <dt>网关控制</dt>
+          <dd>
+            {managed
+              ? '✅ 托管模式（面板负责启停网关，无需 Docker）'
+              : info?.docker_available
+                ? '✅ Docker 可用'
+                : '❌ Docker 不可用（容器控制已降级）'}
+          </dd>
         </dl>
       </div>
 
@@ -287,7 +310,7 @@ curl ${info?.gateway_url || 'http://127.0.0.1:7863'}/v1/chat/completions \\
 
       {confirmRestart && (
         <ConfirmDialog
-          title="重启网关容器"
+          title={managed ? '重启网关进程' : '重启网关容器'}
           danger
           confirmText="确认重启"
           busy={restarting}
@@ -296,7 +319,13 @@ curl ${info?.gateway_url || 'http://127.0.0.1:7863'}/v1/chat/completions \\
           message={
             <>
               <p style={{ marginTop: 0 }}>
-                即将执行 <span className="mono">docker restart {c?.name}</span>。
+                {managed ? (
+                  <>即将重启面板托管的网关进程（pid {c?.pid ?? '—'}）。</>
+                ) : (
+                  <>
+                    即将执行 <span className="mono">docker restart {c?.name}</span>。
+                  </>
+                )}
               </p>
               <p>
                 重启期间（约 2-5 秒）网关无法处理请求，正在进行的对话会中断。

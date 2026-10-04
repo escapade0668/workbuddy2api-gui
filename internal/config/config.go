@@ -68,6 +68,12 @@ type Config struct {
 	// 留空 = 关闭重启能力。
 	DockerContainer string `json:"docker_container"`
 
+	// GatewayExec 网关可执行文件路径；非空 = 托管模式：面板把网关作为子进程启动
+	// （参数 -config <config_file>，工作目录为可执行文件所在目录），崩溃自动拉起，
+	// 面板退出时一并停止；「重启网关」改为重启该进程而非 docker restart。
+	// 面向无 Docker 的单机部署（如 Windows 双击运行）。留空 = 不托管（默认）。
+	GatewayExec string `json:"gateway_exec"`
+
 	// AllowedOrigins 额外允许的写操作来源（Origin 的 host 部分）。
 	//
 	// 用途：面板部署在**不转发任何 Host/X-Forwarded-* 头**的反向代理之后时
@@ -86,8 +92,8 @@ type Config struct {
 	// ReadOnly 全局只读模式：关闭一切写操作（登录、签到、改配置、落盘）。
 	ReadOnly bool `json:"read_only"`
 
-	// RefreshConfigOnLogin 登录成功落盘新凭证后自动重启网关容器以加载。
-	// 对应 login.sh 的行为；需要 DockerContainer 非空且 DangerousOps 打开。
+	// RefreshConfigOnLogin 登录成功落盘新凭证后自动重启网关以加载。
+	// 对应 login.sh 的行为；需要 DangerousOps 打开，且 GatewayExec 或 DockerContainer 非空。
 	RefreshConfigOnLogin bool `json:"refresh_config_on_login"`
 
 	// TimeoutSeconds 调用网关与上游的单次 HTTP 超时（秒）。
@@ -222,6 +228,7 @@ func applyEnv(c *Config) {
 	str("WBGUI_CONFIG_FILE", &c.UpstreamConfigFile)
 	str("WBGUI_BACKUP_DIR", &c.BackupDir)
 	str("WBGUI_CONTAINER", &c.DockerContainer)
+	str("WBGUI_GATEWAY_EXEC", &c.GatewayExec)
 	str("WBGUI_CREDENTIALS_FILE", &c.CredentialsFile)
 	str("WBGUI_PRICING_FILE", &c.PricingFile)
 	// WBGUI_ALLOWED_ORIGINS：逗号分隔的额外允许来源（反代兜底）。
