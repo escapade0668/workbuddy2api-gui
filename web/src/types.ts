@@ -15,13 +15,15 @@ export interface Account {
   has_refresh_token: boolean
 
   in_gateway: boolean
-  /** healthy | cooling | disabled | token_expired | gateway_unreachable | missing_credential | unknown */
+  /** healthy | cooling | paused | disabled | token_expired | gateway_unreachable | missing_credential | unknown */
   status: string
 
   cooling: boolean
   cool_kind?: string
   cool_remaining_sec?: number
   disabled: boolean
+  /** 人工停用：不参与转发，签到/保活照常（旧网关无此字段） */
+  paused?: boolean
   reason?: string
   in_flight: number
   breaker_fails: number
@@ -94,6 +96,7 @@ export interface Overview {
   healthy: number
   cooling: number
   disabled: number
+  paused?: number
   in_flight_full: number
   in_flight: number
   sticky_sessions: number
@@ -116,6 +119,7 @@ export interface GatewayStatus {
   healthy: number
   cooling: number
   disabled: number
+  paused?: number
   in_flight_full: number
   sticky_sessions: number
   redis_mode: string

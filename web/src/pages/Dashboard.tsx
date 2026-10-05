@@ -108,8 +108,14 @@ export default function Dashboard() {
             <Stat
               label="网关账号池"
               value={`${ov.healthy}/${ov.total}`}
-              sub={ov.total === 0 ? '尚未添加任何账号' : `可用 / 总数`}
-              tone={ov.healthy === 0 ? 'danger' : ov.healthy < ov.total ? 'warn' : 'ok'}
+              sub={
+                ov.total === 0
+                  ? '尚未添加任何账号'
+                  : ov.paused
+                    ? `可用 / 总数 · 人工停用 ${ov.paused}`
+                    : '可用 / 总数'
+              }
+              tone={ov.healthy === 0 ? 'danger' : ov.healthy < ov.total - (ov.paused ?? 0) ? 'warn' : 'ok'}
             />
             <Stat label="冷却中" value={String(ov.cooling)} sub="限流 / 熔断冷却" tone={ov.cooling > 0 ? 'warn' : undefined} />
             <Stat label="已禁用" value={String(ov.disabled)} sub="需重新登录" tone={ov.disabled > 0 ? 'danger' : undefined} />

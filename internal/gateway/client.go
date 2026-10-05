@@ -26,6 +26,7 @@ type AccountStatus struct {
 	Reason          string    `json:"reason,omitempty"`
 	SoftStreak      int       `json:"soft_streak,omitempty"`
 	Disabled        bool      `json:"disabled"`
+	Paused          bool      `json:"paused"` // 人工停用：不参与转发，签到/保活照常（旧网关无此字段）
 	SuccessCount    int64     `json:"success_count,omitempty"`
 	ErrTotal        int64     `json:"err_total,omitempty"`
 	LastSuccessTime time.Time `json:"last_success,omitempty"`
@@ -42,6 +43,7 @@ type Status struct {
 	Healthy        int             `json:"healthy"`
 	Cooling        int             `json:"cooling"`
 	Disabled       int             `json:"disabled"`
+	Paused         int             `json:"paused"`
 	InFlightFull   int             `json:"in_flight_full"`
 	StickySessions int             `json:"sticky_sessions"`
 	RedisMode      string          `json:"redis_mode"`
@@ -532,4 +534,31 @@ func (c *Client) ResetStats(ctx context.Context) error {
 		return fmt.Errorf("重置统计失败（HTTP %d）: %s", resp.StatusCode, truncate(string(raw), 200))
 	}
 	return nil
+}
+
+// SetAccountPaused 人工停用（paused=true）/启用单个账号。
+// 停用后网关不再把请求转发给该账号，但定时签到/保活照常。
+// 旧版网关没有该接口（404 且非 JSON 错误体），给出升级提示。
+func (c *Client) SetAccountPaused(ctx context.Context, uid string, paused bool) error {
+	action := "resume"
+	if paused {
+		action = "pause"
+	}
+	resp, err := c.do(ctx, http.MethodPost, "/v1/accounts/"+url.PathEscape(uid)+"/"+action, []byte("{}"))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return nil
+	case resp.StatusCode == http.StatusNotFound && strings.Contains(string(raw), "account not found"):
+		return fmt.Errorf("网关账号池里没有该账号（可能尚未加载，重启网关后再试）")
+	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed:
+		return fmt.Errorf("当前网关版本不支持停用账号，请升级 workbuddy2api")
+	case resp.StatusCode == http.StatusUnauthorized:
+		return fmt.Errorf("网关拒绝鉴权（401）：请检查 api_key 是否正确")
+	}
+	return fmt.Errorf("网关返回 HTTP %d: %s", resp.StatusCode, truncate(string(raw), 200))
 }

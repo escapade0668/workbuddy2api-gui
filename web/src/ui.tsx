@@ -85,6 +85,8 @@ export function statusBadge(status: string): { cls: string; text: string } {
       return { cls: 'badge-ok', text: '正常' }
     case 'cooling':
       return { cls: 'badge-warn', text: '冷却中' }
+    case 'paused':
+      return { cls: 'badge-dim', text: '已停用' }
     case 'disabled':
       return { cls: 'badge-danger', text: '已禁用' }
     case 'token_expired':

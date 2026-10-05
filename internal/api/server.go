@@ -61,6 +61,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/accounts/{uid}/refresh", s.handleAccountRefresh)
 	mux.HandleFunc("POST /api/accounts/{uid}/travel", s.handleAccountTravel)
 	mux.HandleFunc("POST /api/accounts/{uid}/credits", s.handleAccountCredits)
+	mux.HandleFunc("POST /api/accounts/{uid}/pause", s.handleAccountPause(true))
+	mux.HandleFunc("POST /api/accounts/{uid}/resume", s.handleAccountPause(false))
 
 	// ── 批量任务 ──────────────────────────────────────────
 	mux.HandleFunc("POST /api/tasks/checkin", s.handleBatchCheckin)
@@ -161,6 +163,21 @@ func (s *Server) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "凭证文件已删除，重启网关后该账号移出账号池"})
+}
+
+// handleAccountPause 停用/启用账号的转发（签到/保活不受影响）。
+func (s *Server) handleAccountPause(paused bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := s.svc.SetPaused(r.Context(), r.PathValue("uid"), paused); err != nil {
+			writeError(w, err)
+			return
+		}
+		msg := "已启用：账号恢复参与请求转发"
+		if paused {
+			msg = "已停用：账号不再参与请求转发，自动签到照常"
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "paused": paused, "message": msg})
+	}
 }
 
 func (s *Server) handleAccountImport(w http.ResponseWriter, r *http.Request) {

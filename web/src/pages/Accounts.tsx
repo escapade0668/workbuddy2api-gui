@@ -20,7 +20,7 @@ import {
 } from '../ui'
 import TaskProgress from './TaskProgress'
 
-type Filter = 'all' | 'healthy' | 'cooling' | 'problem' | 'expiring'
+type Filter = 'all' | 'healthy' | 'cooling' | 'paused' | 'problem' | 'expiring'
 
 export default function Accounts({ session }: { session: SessionInfo }) {
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -73,6 +73,8 @@ export default function Accounts({ session }: { session: SessionInfo }) {
           return a.status === 'healthy'
         case 'cooling':
           return a.status === 'cooling'
+        case 'paused':
+          return !!a.paused
         case 'problem':
           return a.status === 'disabled' || a.status === 'token_expired' || a.status === 'missing_credential'
         case 'expiring':
@@ -129,6 +131,21 @@ export default function Accounts({ session }: { session: SessionInfo }) {
           text: `${displayName(a)}：剩余 ${fmtNum(c.remain)} / 总量 ${fmtNum(c.size)}（${c.packages} 个套餐）`,
         })
       }
+      await load(true)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof ApiError ? err.message : '操作失败' })
+    } finally {
+      setBusyUid(null)
+    }
+  }
+
+  /** togglePaused 停用 / 启用账号的请求转发（签到与保活不受影响）。 */
+  const togglePaused = async (a: Account) => {
+    setBusyUid(a.uid)
+    setNotice(null)
+    try {
+      const res = await api.accountSetPaused(a.uid, !a.paused)
+      setNotice({ kind: 'ok', text: `${displayName(a)}：${res.message}` })
       await load(true)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof ApiError ? err.message : '操作失败' })
@@ -196,7 +213,7 @@ export default function Accounts({ session }: { session: SessionInfo }) {
         </div>
       </div>
 
-      {writeDisabled && <Alert kind="warn">服务端已开启只读模式，签到 / 刷新 / 删除等写操作已禁用。</Alert>}
+      {writeDisabled && <Alert kind="warn">服务端已开启只读模式，签到 / 刷新 / 停用 / 删除等写操作已禁用。</Alert>}
       {notice && (
         <Alert kind={notice.kind} onClose={() => setNotice(null)}>
           {notice.text}
@@ -271,6 +288,7 @@ export default function Accounts({ session }: { session: SessionInfo }) {
               <option value="all">全部</option>
               <option value="healthy">仅正常</option>
               <option value="cooling">仅冷却中</option>
+              <option value="paused">仅已停用</option>
               <option value="problem">仅异常</option>
               <option value="expiring">Token 需刷新</option>
             </select>
@@ -348,6 +366,11 @@ export default function Accounts({ session }: { session: SessionInfo }) {
                             {coolKindText(a.cool_kind)} · 剩 {fmtDuration(a.cool_remaining_sec)}
                           </div>
                         )}
+                        {a.paused && !a.disabled && (
+                          <div className="text-faint" style={{ fontSize: 11.5, marginTop: 3 }}>
+                            不参与转发 · 签到照常
+                          </div>
+                        )}
                         {a.disabled && a.reason && (
                           <div className="text-faint" style={{ fontSize: 11.5, marginTop: 3 }}>
                             {a.reason}
@@ -419,6 +442,20 @@ export default function Accounts({ session }: { session: SessionInfo }) {
                           </button>
                           <button className="btn btn-sm" disabled={busy} onClick={() => void runSingle(a, 'credits')} title="查询余额">
                             积分
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            disabled={busy || writeDisabled || !a.in_gateway}
+                            onClick={() => void togglePaused(a)}
+                            title={
+                              !a.in_gateway
+                                ? '该账号不在网关池中（网关未加载或不可达）'
+                                : a.paused
+                                  ? '恢复参与请求转发'
+                                  : '停用后不参与请求转发，自动签到 / 保活照常'
+                            }
+                          >
+                            {a.paused ? '启用' : '停用'}
                           </button>
                           <button
                             className="btn btn-sm btn-danger"
@@ -583,6 +620,7 @@ function AccountDetail({ uid, onClose }: { uid: string; onClose: () => void }) {
             <dd>
               <Badge cls={statusBadge(a.status).cls}>{statusBadge(a.status).text}</Badge>
               {a.reason && <span className="text-faint"> · {a.reason}</span>}
+              {a.paused && !a.disabled && <span className="text-faint"> · 人工停用：不参与转发，签到 / 保活照常</span>}
             </dd>
             {a.cooling && (
               <>

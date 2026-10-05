@@ -51,11 +51,12 @@ type AccountView struct {
 
 	// gateway 侧运行态；InGateway=false 表示该账号在池中不存在。
 	InGateway       bool      `json:"in_gateway"`
-	Status          string    `json:"status"` // healthy | cooling | disabled | unknown
+	Status          string    `json:"status"` // healthy | cooling | paused | disabled | unknown
 	Cooling         bool      `json:"cooling"`
 	CoolKind        string    `json:"cool_kind,omitempty"`
 	CoolRemaining   int64     `json:"cool_remaining_sec,omitempty"`
 	Disabled        bool      `json:"disabled"`
+	Paused          bool      `json:"paused"` // 人工停用：不参与转发，签到/保活照常
 	Reason          string    `json:"reason,omitempty"`
 	InFlight        int       `json:"in_flight"`
 	BreakerFails    int       `json:"breaker_fails"`
@@ -95,6 +96,7 @@ type Overview struct {
 	Healthy        int             `json:"healthy"`
 	Cooling        int             `json:"cooling"`
 	Disabled       int             `json:"disabled"`
+	Paused         int             `json:"paused"`
 	InFlightFull   int             `json:"in_flight_full"`
 	InFlight       int             `json:"in_flight"`
 	StickySessions int             `json:"sticky_sessions"`
@@ -367,6 +369,7 @@ func (s *Service) Accounts(ctx context.Context) ([]AccountView, *gateway.Status,
 			v.CoolKind = ga.CoolKind
 			v.CoolRemaining = ga.CoolRemaining
 			v.Disabled = ga.Disabled
+			v.Paused = ga.Paused
 			v.Reason = ga.Reason
 			v.InFlight = ga.InFlight
 			v.BreakerFails = ga.BreakerFails
@@ -383,6 +386,8 @@ func (s *Service) Accounts(ctx context.Context) ([]AccountView, *gateway.Status,
 			switch {
 			case ga.Disabled:
 				v.Status = "disabled"
+			case ga.Paused:
+				v.Status = "paused"
 			case ga.Cooling:
 				v.Status = "cooling"
 			default:
@@ -456,6 +461,7 @@ func (s *Service) Overview(ctx context.Context) *Overview {
 		ov.Healthy = status.Healthy
 		ov.Cooling = status.Cooling
 		ov.Disabled = status.Disabled
+		ov.Paused = status.Paused
 		ov.InFlightFull = status.InFlightFull
 		ov.StickySessions = status.StickySessions
 		ov.RedisMode = status.RedisMode
@@ -971,6 +977,15 @@ func (s *Service) BatchCredits(ctx context.Context, uids []string) (*TaskView, e
 // ---------------------------------------------------------------------------
 
 // DeleteAccount 删除账号凭证（高危：不可从上游恢复）。
+// SetPaused 人工停用（paused=true）/启用账号：经网关即时生效并持久化在网关侧。
+// 停用只影响请求转发，签到/保活/旅行照常（网关定时任务与面板手动操作都不受影响）。
+func (s *Service) SetPaused(ctx context.Context, uid string, paused bool) error {
+	if err := s.ensureWritable(); err != nil {
+		return err
+	}
+	return s.gw.SetAccountPaused(ctx, uid, paused)
+}
+
 func (s *Service) DeleteAccount(ctx context.Context, uid string) error {
 	if err := s.ensureDangerous(); err != nil {
 		return err

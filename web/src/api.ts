@@ -102,6 +102,10 @@ export const api = {
   accountRefresh: (uid: string) => post<OpResult>(`/api/accounts/${encodeURIComponent(uid)}/refresh`),
   accountTravel: (uid: string) => post<OpResult>(`/api/accounts/${encodeURIComponent(uid)}/travel`),
   accountCredits: (uid: string) => post<Credits>(`/api/accounts/${encodeURIComponent(uid)}/credits`),
+  accountSetPaused: (uid: string, paused: boolean) =>
+    post<{ ok: boolean; paused: boolean; message: string }>(
+      `/api/accounts/${encodeURIComponent(uid)}/${paused ? 'pause' : 'resume'}`,
+    ),
 
   // 批量任务
   batchCheckin: (uids: string[]) => post<TaskView>('/api/tasks/checkin', { uids }),
