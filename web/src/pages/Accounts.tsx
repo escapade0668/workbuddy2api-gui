@@ -109,11 +109,22 @@ export default function Accounts({ session }: { session: SessionInfo }) {
   }
 
   /** runSingle 执行单账号操作并展示结果。 */
-  const runSingle = async (a: Account, action: 'checkin' | 'refresh' | 'travel' | 'credits') => {
+  const runSingle = async (a: Account, action: 'checkin' | 'refresh' | 'travel' | 'credits' | 'session') => {
     setBusyUid(a.uid)
     setNotice(null)
     try {
-      if (action === 'checkin' || action === 'refresh' || action === 'travel') {
+      if (action === 'session') {
+        const res = await api.accountSessionCheck(a.uid)
+        setNotice({
+          kind: res.state === 'dead' ? 'error' : 'ok',
+          text:
+            res.state === 'ok'
+              ? `${displayName(a)}：会话正常`
+              : res.state === 'dead'
+                ? `${displayName(a)}：会话已失效（服务端已回收），请重新登录`
+                : `${displayName(a)}：无法判定（${res.msg || '网络异常'}）`,
+        })
+      } else if (action === 'checkin' || action === 'refresh' || action === 'travel') {
         const res =
           action === 'checkin'
             ? await api.accountCheckin(a.uid)
@@ -381,6 +392,29 @@ export default function Accounts({ session }: { session: SessionInfo }) {
                             需刷新或重新登录
                           </div>
                         )}
+                        {a.session_state === 'dead' && (
+                          <div style={{ marginTop: 3, fontSize: 11.5 }}>
+                            <span className="text-danger">会话失效 · 需重新登录</span>{' '}
+                            <Link
+                              to={`/login?region=${a.domain?.includes('workbuddy.ai') ? 'global' : 'cn'}`}
+                              className="btn btn-sm btn-danger"
+                              style={{ marginLeft: 4, padding: '1px 8px', fontSize: 11 }}
+                              title="服务端会话已被回收（token 纸面未过期也无效），走网页授权重新登录该账号"
+                            >
+                              重新登录
+                            </Link>
+                          </div>
+                        )}
+                        {a.session_state === 'ok' && (
+                          <div className="text-faint" style={{ fontSize: 11.5, marginTop: 3 }}>
+                            会话正常
+                          </div>
+                        )}
+                        {a.session_state === 'unknown' && (
+                          <div className="text-warn" style={{ fontSize: 11.5, marginTop: 3 }} title={a.session_msg}>
+                            会话状态未知
+                          </div>
+                        )}
                       </td>
                       <td className="num">
                         {(() => {
@@ -442,6 +476,14 @@ export default function Accounts({ session }: { session: SessionInfo }) {
                           </button>
                           <button className="btn btn-sm" disabled={busy} onClick={() => void runSingle(a, 'credits')} title="查询余额">
                             积分
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            disabled={busyUid === a.uid || busy}
+                            onClick={() => void runSingle(a, 'session')}
+                            title="同步探测上游会话是否存活（token 纸面未过期也可能已被服务端回收）"
+                          >
+                            检测
                           </button>
                           <button
                             className="btn btn-sm"

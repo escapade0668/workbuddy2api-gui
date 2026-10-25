@@ -40,6 +40,12 @@ export interface Account {
   /** 积分到期：与 live_credits 同源同时刻。 */
   credits_expire_at?: string
   credits_expiring?: number
+
+  /** 会话健康（GUI 主动探测上游所得，与网关池状态独立）：ok | dead | unknown；空 = 未检测。 */
+  session_state?: 'ok' | 'dead' | 'unknown'
+  /** 失败原因（dead / unknown 时展示）。 */
+  session_msg?: string
+  session_checked_at?: string
 }
 
 /** 单个积分包的到期明细。 */

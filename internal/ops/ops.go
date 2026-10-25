@@ -74,6 +74,22 @@ type AccountView struct {
 	// 积分到期：与 LiveCredits 同源同时刻（来自主动查询的积分包明细）。
 	CreditsExpireAt *string `json:"credits_expire_at,omitempty"`
 	CreditsExpiring *int64  `json:"credits_expiring,omitempty"`
+
+	// 会话健康（主动探测上游所得，与网关池状态独立）：
+	//   ok = access token（或自动刷新后的新 token）能通过上游鉴权
+	//   dead = 服务端会话已失效，需要人工重新登录
+	//   unknown = 网络异常等无法判定
+	// 空 = 尚未探测过。
+	SessionState     string     `json:"session_state,omitempty"` // ok | dead | unknown
+	SessionMsg       string     `json:"session_msg,omitempty"`
+	SessionCheckedAt *time.Time `json:"session_checked_at,omitempty"`
+}
+
+// sessionCache 会话探测结果缓存。
+type sessionCache struct {
+	state string    // ok | dead | unknown
+	msg   string    // 失败原因（dead/unknown 时给前端展示）
+	at    time.Time
 }
 
 // CreditsTotal 全局积分汇总。
@@ -150,6 +166,13 @@ type Service struct {
 	configs map[string]realmConfigCache
 	// creditLoading 标记「正在后台查询积分」的 uid，用于单飞（避免重复打上游）。
 	creditLoading map[string]bool
+
+	// sessions 会话健康探测缓存：上游服务端会话可能在 token 声明过期前被回收
+	//（网关进程死亡两天无人刷新即触发，2026-10-25 事故），网关池状态对此无感知，
+	// GUI 必须主动探测才能把「会话已死」与「正常」区分开。
+	sessions map[string]sessionCache
+	// sessionLoading 单飞标记，同 creditLoading。
+	sessionLoading map[string]bool
 
 	// proc 托管模式下的网关进程管理器（nil = 未托管，重启走 docker）。
 	proc *gwproc.Manager
@@ -281,6 +304,8 @@ func New(cfg *config.Config, store *authstore.Store, gw *gateway.Client, up *ups
 		credits:       map[string]creditCache{},
 		configs:       map[string]realmConfigCache{},
 		creditLoading: map[string]bool{},
+		sessions:      map[string]sessionCache{},
+		sessionLoading: map[string]bool{},
 	}
 }
 
@@ -410,6 +435,15 @@ func (s *Service) Accounts(ctx context.Context) ([]AccountView, *gateway.Status,
 			}
 			expiring := c.credits.ExpiringRemain
 			v.CreditsExpiring = &expiring
+		}
+	}
+	// 合并会话探测缓存。
+	for uid, sc := range s.sessions {
+		if v, ok := byUID[uid]; ok && sc.state != "" {
+			at := sc.at
+			v.SessionState = sc.state
+			v.SessionMsg = sc.msg
+			v.SessionCheckedAt = &at
 		}
 	}
 	s.mu.RUnlock()
@@ -581,6 +615,78 @@ const (
 	creditQueryInterval = 300 * time.Millisecond
 	creditQueryTimeout  = 20 * time.Second
 )
+
+// ---------------------------------------------------------------------------
+// 会话健康探测
+// ---------------------------------------------------------------------------
+
+// sessionProbeTTL 探测结果缓存时长。会话死亡是低频事件，10 分钟粒度足够
+//（前端 20 秒轮询看到的是缓存；「检测」按钮走同步探测不受 TTL 限制）。
+const sessionProbeTTL = 10 * time.Minute
+
+// SessionFor 同步探测一个账号的会话健康并写缓存。
+//
+// 探测复用 CreditsFor：它先用存量 access token 调鉴权接口，临期自动刷新
+//（能自愈「token 过期但会话还活着」的情况），返回错误则按 upstream 的
+// ErrSessionDead 分类判定「会话已死」。不做额外请求。
+func (s *Service) SessionFor(ctx context.Context, uid string) (string, string, error) {
+	_, err := s.CreditsFor(ctx, uid)
+	state, msg := "unknown", ""
+	switch {
+	case err == nil:
+		state = "ok"
+	case upstream.IsSessionDead(err):
+		state = "dead"
+		msg = err.Error()
+	default:
+		state = "unknown"
+		msg = err.Error()
+	}
+	s.mu.Lock()
+	s.sessions[uid] = sessionCache{state: state, msg: msg, at: time.Now()}
+	s.mu.Unlock()
+	return state, msg, nil
+}
+
+// EnsureSessions 为列表里的账号异步补齐会话探测（照抄 EnsureCredits 的
+// 单飞 + 串行限速模式）。无凭证文件的账号跳过。
+func (s *Service) EnsureSessions(views []AccountView) {
+	now := time.Now()
+
+	s.mu.Lock()
+	var todo []string
+	for _, v := range views {
+		if !v.HasFile {
+			continue
+		}
+		if c, ok := s.sessions[v.UID]; ok && now.Sub(c.at) < sessionProbeTTL {
+			continue
+		}
+		if s.sessionLoading[v.UID] {
+			continue
+		}
+		s.sessionLoading[v.UID] = true
+		todo = append(todo, v.UID)
+	}
+	s.mu.Unlock()
+
+	if len(todo) == 0 {
+		return
+	}
+	go func() {
+		for i, uid := range todo {
+			if i > 0 {
+				time.Sleep(creditQueryInterval)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), creditQueryTimeout)
+			_, _, _ = s.SessionFor(ctx, uid)
+			cancel()
+			s.mu.Lock()
+			delete(s.sessionLoading, uid)
+			s.mu.Unlock()
+		}
+	}()
+}
 
 // ---------------------------------------------------------------------------
 // 单账号操作

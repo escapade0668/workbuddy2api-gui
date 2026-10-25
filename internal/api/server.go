@@ -61,6 +61,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/accounts/{uid}/refresh", s.handleAccountRefresh)
 	mux.HandleFunc("POST /api/accounts/{uid}/travel", s.handleAccountTravel)
 	mux.HandleFunc("POST /api/accounts/{uid}/credits", s.handleAccountCredits)
+	mux.HandleFunc("POST /api/accounts/{uid}/session-check", s.handleAccountSessionCheck)
 	mux.HandleFunc("POST /api/accounts/{uid}/pause", s.handleAccountPause(true))
 	mux.HandleFunc("POST /api/accounts/{uid}/resume", s.handleAccountPause(false))
 
@@ -124,6 +125,9 @@ func (s *Server) handleAccounts(w http.ResponseWriter, r *http.Request) {
 	// 初值为 0，而网关只在签到任务里更新它——不主动查就会一直显示 0。
 	// 异步执行，不阻塞本响应；前端 20 秒轮询即可看到结果。
 	s.svc.EnsureCredits(accounts)
+	// 异步补齐会话健康探测：网关池状态对「服务端会话已回收」无感知
+	//（2026-10-25 事故：token 声明未过期但会话已死，GUI 一直显示正常）。
+	s.svc.EnsureSessions(accounts)
 	resp := map[string]any{
 		"accounts":    accounts,
 		"file_issues": issues,
@@ -231,6 +235,23 @@ func (s *Server) handleAccountCredits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, c)
+}
+
+// handleAccountSessionCheck 同步探测单账号会话健康（按钮触发，绕过缓存 TTL）。
+// dead 时返回 200 + state（会话失效是探测成功，不是接口错误），前端据此引导重登。
+func (s *Server) handleAccountSessionCheck(w http.ResponseWriter, r *http.Request) {
+	uid := r.PathValue("uid")
+	state, msg, err := s.svc.SessionFor(r.Context(), uid)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"uid":         uid,
+		"state":       state,
+		"msg":         msg,
+		"checked_at":  time.Now(),
+	})
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 // LoginWizard.tsx 网页版 OAuth 设备授权登录：替代 login.sh 的全流程。
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import type { LoginSession, SessionInfo } from '../types'
 import { Alert, Spinner } from '../ui'
@@ -20,7 +20,9 @@ export default function LoginWizard({
   const [copied, setCopied] = useState(false)
   const pollRef = useRef<number | null>(null)
   const [manualUID, setManualUID] = useState<string | null>(null)
-  const [region, setRegion] = useState<'cn' | 'global'>('cn')
+  // 支持从 URL 预选区域（账号卡片「重新登录」跳转 /login?region=cn|global）。
+  const [searchParams] = useSearchParams()
+  const [region, setRegion] = useState<'cn' | 'global'>(searchParams.get('region') === 'global' ? 'global' : 'cn')
 
   // 清理轮询定时器，避免离开页面后继续打接口。
   useEffect(() => {

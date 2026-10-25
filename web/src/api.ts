@@ -102,6 +102,10 @@ export const api = {
   accountRefresh: (uid: string) => post<OpResult>(`/api/accounts/${encodeURIComponent(uid)}/refresh`),
   accountTravel: (uid: string) => post<OpResult>(`/api/accounts/${encodeURIComponent(uid)}/travel`),
   accountCredits: (uid: string) => post<Credits>(`/api/accounts/${encodeURIComponent(uid)}/credits`),
+  accountSessionCheck: (uid: string) =>
+    post<{ uid: string; state: 'ok' | 'dead' | 'unknown'; msg: string; checked_at: string }>(
+      `/api/accounts/${encodeURIComponent(uid)}/session-check`,
+    ),
   accountSetPaused: (uid: string, paused: boolean) =>
     post<{ ok: boolean; paused: boolean; message: string }>(
       `/api/accounts/${encodeURIComponent(uid)}/${paused ? 'pause' : 'resume'}`,
